@@ -1,6 +1,7 @@
 import re
 import streamlit as st
 from detector import analyze_message, get_matched_words
+from link_checker import analyze_links
 
 st.set_page_config(page_title="Scam Detection Assistant", page_icon="🛡️")
 
@@ -53,6 +54,18 @@ if st.button("Analyze Message", type="primary"):
         risk, flags, confidence = analyze_message(message)
         matched_words = get_matched_words(message)
 
+        # ---------- NEW: Link Check ----------
+        link_results, link_risk = analyze_links(message)
+
+        # Agar link High Risk hai toh final result ek level upar
+        if link_risk == "High Risk":
+            if risk in ("Safe", "Likely Safe"):
+                risk = "Suspicious"
+            elif risk == "Suspicious":
+                risk = "High Risk"
+            flags = list(flags) + ["dangerous_link"]
+        # -------------------------------------
+
         st.session_state.total_checked += 1
         if risk in ("High Risk", "Suspicious"):
             st.session_state.total_risky += 1
@@ -78,12 +91,30 @@ if st.button("Analyze Message", type="primary"):
             "suspicious_link": "Contains a suspicious link/click instruction",
             "money_lure": "Promises money, prizes, or lottery winnings",
             "payment_pressure": "Pressures you to pay a fee immediately",
+            "dangerous_link": "Contains a high-risk link (see Link Check below)",
         }
         if flags:
             for flag in flags:
                 st.markdown(f"- {flag_labels.get(flag, flag)}")
         else:
             st.markdown("- No rule-based red flags detected")
+
+        # ---------- NEW: Link Check section ----------
+        st.subheader("🔗 Link Check")
+        if not link_results:
+            st.caption("No links found in this message.")
+        else:
+            for r in link_results:
+                if r["risk"] == "High Risk":
+                    st.error(f"🔴 **High Risk** — `{r['url']}`")
+                elif r["risk"] == "Suspicious":
+                    st.warning(f"🟠 **Suspicious** — `{r['url']}`")
+                else:
+                    st.success(f"🟢 **Looks safe** — `{r['url']}`")
+                for reason in r["reasons"]:
+                    st.markdown(f"- {reason}")
+            st.caption("Note: Links are never opened — only their name and structure are checked.")
+        # ---------------------------------------------
 
         if risk in ("High Risk", "Suspicious"):
             st.subheader("What should you do?")
